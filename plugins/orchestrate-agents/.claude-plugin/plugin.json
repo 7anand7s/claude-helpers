@@ -1,7 +1,7 @@
 {
   "name": "orchestrate-agents",
   "description": "Subagent roles for the orchestrate loop: scout (locate), researcher (verify facts), builder (hand: implement in worktree + run suite), refuter (cold reviewer: ACCEPT|REWORK + MUST_FIX), debugger (diagnosis-only root cause). Ships the `orchestrate` skill too, so lead + hands travel together.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": {
     "name": "Anand"
   },
