@@ -1,0 +1,18 @@
+{
+  "name": "claude-helpers",
+  "owner": {
+    "name": "Anand"
+  },
+  "metadata": {
+    "description": "Personal Claude Code helpers: subagents (and later skills) that travel with me across machines."
+  },
+  "plugins": [
+    {
+      "name": "orchestrate-agents",
+      "source": "./plugins/orchestrate-agents",
+      "description": "Scout / researcher / builder (hand) / refuter (cold reviewer) / debugger (diagnosis-only) subagents for the orchestrate loop.",
+      "version": "0.2.0",
+      "category": "productivity"
+    }
+  ]
+}

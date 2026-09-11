@@ -19,4 +19,4 @@ Rules:
   UNVERIFIED:
   - <claim you could not confirm, and why>
   ```
-- If findings are long, write the detail to a scratch file (e.g. `.claude/scratch/<topic>.md`) and return only the file path plus a short summary — let the next agent read the file instead of re[...]
+- If findings are long, write the detail to a scratch file (e.g. `.claude/scratch/<topic>.md`) and return only the file path plus a short summary — let the next agent read the file instead of receiving a dump.

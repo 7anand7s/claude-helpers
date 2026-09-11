@@ -1,6 +1,6 @@
 ---
 name: debugger
-description: Diagnosis-only subagent for the orchestrate loop's escalation path. Use only when a ticket has failed review twice or the failure mode isn't understood — reproduces the failure and s[...]
+description: Diagnosis-only subagent for the orchestrate loop's escalation path. Use only when a ticket has failed review twice or the failure mode isn't understood — reproduces the failure and states the root cause. Does NOT fix anything; its report becomes the next hand's feedback packet.
 tools: Read, Bash, Grep, Glob
 model: opus
 ---
