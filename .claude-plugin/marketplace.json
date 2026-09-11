@@ -11,7 +11,7 @@
       "name": "orchestrate-agents",
       "source": "./plugins/orchestrate-agents",
       "description": "Scout / researcher / builder (hand) / refuter (cold reviewer) / debugger (diagnosis-only) subagents for the orchestrate loop.",
-      "version": "0.2.0",
+      "version": "0.4.0",
       "category": "productivity"
     }
   ]
