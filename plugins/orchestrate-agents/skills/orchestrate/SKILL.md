@@ -111,10 +111,12 @@ Rate each signal 0–2:
 
 | Score (0–12) | Model | Thinking |
 |---|---|---|
-| 0–2 | Haiku 4.5 | low |
-| 3–5 | Sonnet 4.6 | medium |
-| 6–8 | Sonnet 5 | high |
-| 9–12 | Opus (subagent) | high / ultra |
+| 0–2 | `haiku` | low |
+| 3–5 | `sonnet` | medium |
+| 6–8 | `sonnet` | high |
+| 9–12 | `opus` | high / ultra |
+
+Route by family alias (`haiku` / `sonnet` / `opus`), never a versioned name — the alias resolves to the newest model in that family, so the table stays correct as new models ship.
 
 Blast radius **also** independently sets review rigor (below), regardless of the size/thinking result.
 

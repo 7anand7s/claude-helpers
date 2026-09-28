@@ -45,4 +45,9 @@ The contracts match the `orchestrate` skill's ticket loop (mint → dispatch →
 plugins/orchestrate-agents/
   .claude-plugin/plugin.json           # plugin manifest
   agents/*.md                          # subagent definitions
+  skills/orchestrate/SKILL.md          # the orchestrate skill (lead playbook)
 ```
+
+## Model versions
+
+Agents use family aliases (`haiku`, `sonnet`, `opus`), never versioned names. Claude Code maps each alias to the newest model in that family, so when a new Opus/Sonnet/Haiku ships, updating Claude Code is enough — no change here. Don't pin a version unless you deliberately want to stay on an older model (then use the full model ID, e.g. `claude-opus-5-5`).
