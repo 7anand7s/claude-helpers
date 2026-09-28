@@ -26,15 +26,22 @@ After pushing changes to this repo:
 
 ### orchestrate-agents
 
-Five subagent roles that pair with the account-level `orchestrate` skill (lead = Fable; hands and reviewers = cheaper tiers):
+Five subagent roles plus the `orchestrate` skill that drives them. The lead (orchestrator) is whatever model your session runs — pick it with `/model` (Opus recommended). The plugin sets only the subagents' default models; the lead can override per dispatch.
 
 | Agent | Model | Role | Output contract |
 |---|---|---|---|
 | `scout` | Haiku | Locate files/symbols/call sites — never dumps contents | `FOUND / NOT FOUND` |
 | `researcher` | Sonnet | Read docs/source, report verified facts, flag the rest | `VERIFIED / UNVERIFIED` |
 | `builder` | Sonnet | The hand: implement a ticket in its own worktree/branch, run the suite there, commit | `RESULT / TOUCHED / SUITE / DEVIATIONS / CLAIMS` |
-| `refuter` | Opus | Cold reviewer: sees only diff + spec, reruns suite, adversarial | `VERDICT ACCEPT\|REWORK / CHECKED / EVIDENCE / MUST_FIX / RISK / RECOMMEND` |
+| `refuter` | Opus (lead passes Sonnet for low-risk tickets) | Cold reviewer: sees only diff + spec, reruns suite, adversarial | `VERDICT ACCEPT\|REWORK / CHECKED / EVIDENCE / MUST_FIX / RISK / RECOMMEND` |
 | `debugger` | Opus | Diagnosis-only root cause on repeated failure; never edits | `REPRODUCED / ROOT CAUSE / CONFIDENCE / FIX FOR HAND` |
+
+### Efficiency: read once, point many times
+
+- **Code map** — one shared file per mission (`.claude/scratch/codemap.md`). Scout, researcher, builder and debugger append one-line `file:line` facts; the lead points each hand at the relevant sections instead of letting it search. The lead never reads its contents, so its own context stays lean.
+- **Pointers, not searches** — packets carry exact `TOUCHES` + code map sections; builders and reviewers start there and read further only where needed.
+- **Warm hands** — consecutive tickets in the same area continue the same builder (it already holds that code) instead of spawning a fresh one; capped at 3 tickets before a fresh start. Reviewers are always cold.
+- **Reviewer by risk** — Sonnet for low-rigor reviews, Opus for medium/high.
 
 The contracts match the `orchestrate` skill's ticket loop (mint → dispatch → cold review → judge → merge gate → fold/retire). If the skill's schemas change, change them here too.
 
