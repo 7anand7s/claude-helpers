@@ -18,4 +18,5 @@ Rules:
   - <path>:<line> — <symbol/pattern> — <1-line context>
   NOT FOUND: <anything requested but not located>
   ```
+- If you were given a code map path, check it first and skip anything it already locates. Append your new hits to it under a `## <area>` heading, in the same one-line format, so later agents don't search again.
 - Stay inside the scope you were given. If the task needs judgment about *what to do* with what you found, that's not your job — say what you found and stop.

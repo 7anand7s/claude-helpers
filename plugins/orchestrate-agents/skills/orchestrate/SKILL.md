@@ -18,6 +18,8 @@ Three guarantees this skill exists to hold:
 
 Raw file contents, terminal output, and subagent scratch work **never** enter your context. You read *decisions and verdicts*, never raw work. Every rule below serves this invariant — if something would pull raw work into your context, dispatch a subagent to absorb it instead.
 
+**Read once, point many times.** What subagents learn about the code goes into the shared code map (below), not your context and not their dead context. You hold only its path and section names, and you point each hand at exactly the sections and `file:line` locations it needs, so no agent re-discovers what another already found.
+
 ## The loop
 
 ```
@@ -25,14 +27,14 @@ Raw file contents, terminal output, and subagent scratch work **never** enter yo
    Huge build only     → after the user explicitly confirms: phased clarification → to-prd → to-issues
 2. Write the mission brief                    → the durable big picture
 3. For each task in the current slice:
-   a. Scout (if scope isn't known)   → cheap locate-only pass populates TOUCHES
+   a. Scout (if scope isn't known)   → cheap locate-only pass populates TOUCHES + the code map
    b. Route                          → model size / thinking tier / review rigor
    c. Mint                           → branch + worktree + seat for this ticket
-   d. Dispatch                       → hand boots in its worktree, implements, runs suite, commits, reports
+   d. Dispatch                       → fresh hand, or the warm hand from the previous ticket in the same area
    e. Cold review                    → fresh reviewer gets diff + packet only → ACCEPT | REWORK
    f. Judge                          → REWORK to same hand once → then escalate; ACCEPT → merge gate
    g. Merge gate                     → merge to main, full suite on main; red = revert + escalate
-   h. Fold + retire                  → fold outcome into brief; retire hand, remove worktree, delete branch
+   h. Fold + retire                  → fold outcome into brief; remove worktree, delete branch; keep hand warm only if the next ticket is in the same area
 4. On repeated failure, escalate; at the cap, surface to the user.
 ```
 
@@ -50,6 +52,7 @@ GOAL:        one paragraph — what "done" means for the whole mission
 SLICE:       the vertical slice currently in flight
 CONSTRAINTS: architectural invariants, conventions, non-negotiables
 SEATS:       N — max hands in flight at once (default 4; lower on a small box)
+CODEMAP:     .claude/scratch/codemap.md — shared code map for this mission (path only; never its contents)
 DONE:        [ticket → verdict]  ledger of accepted work, folded and terse
 OPEN:        [ticket → state]    remaining work with its ticket state
 DECISIONS:   routing/override log — why each non-obvious call was made
@@ -69,6 +72,7 @@ TASK:       what to build, precisely (the spec)
 ACCEPTANCE: exactly how the reviewer will verify it (tests / schema / DoD subset)
 TOUCHES:    expected files / surface area — must be disjoint from every other in-flight ticket
 CONTEXT:    minimal brief-derived context the hand needs — NOT raw file dumps
+CODEMAP:    path + the section headings relevant to this ticket, plus scout's file:line hits
 ROUTING:    the difficulty read and the resulting size / thinking / rigor
 BRANCH:     ticket/<id>-<slug>     WORKTREE: path     SEAT: k of N
 ```
@@ -85,6 +89,25 @@ NOT FOUND: [anything requested but not located]
 ```
 
 The scout's report becomes the task packet's `TOUCHES`. Skip this step only when the packet's scope is already fully known. Scouts are read-only and always safe to run in parallel.
+
+---
+
+## Code map — the shared memory that stops re-reading
+
+One file per mission, `.claude/scratch/codemap.md` in the main checkout, outside any ticket worktree — pass its absolute path. At mission start, add `.claude/scratch/` to `.git/info/exclude` so it is never committed. Scouts and researchers **append** to it; builders and the debugger read it before opening code and append anything durable they learned. Sections are keyed by area, so you can point a hand at just the ones it needs:
+
+```
+## <area> (e.g. auth/session)
+- path:line — symbol — what it does / how it's called (1 line)
+- invariant / convention / gotcha discovered (1 line, with file:line)
+```
+
+Rules:
+- Terse facts with `file:line`, never code bodies. It is an index into the code, not a copy of it.
+- Parallel hands append only under their own area's heading; if an edit fails because the file changed, re-read and retry.
+- Before dispatching a scout, check whether the map already has the area (`grep '^## ' <codemap>` — headings only, never the contents). If it does, skip the scout and point straight at the section.
+- When a merge changes code the map describes, the hand that made the change updates those entries in the same run. A stale map is worse than none.
+- You never read the map's contents yourself — only its headings. It exists so the hands share memory without routing it through you.
 
 ---
 
@@ -111,10 +134,12 @@ Rate each signal 0–2:
 
 | Score (0–12) | Model | Thinking |
 |---|---|---|
-| 0–2 | Haiku 4.5 | low |
-| 3–5 | Sonnet 4.6 | medium |
-| 6–8 | Sonnet 5 | high |
-| 9–12 | Opus (subagent) | high / ultra |
+| 0–2 | `haiku` | low |
+| 3–5 | `sonnet` | medium |
+| 6–8 | `sonnet` | high |
+| 9–12 | `opus` | high / ultra |
+
+Route by family alias (`haiku` / `sonnet` / `opus`), never a versioned name — the alias resolves to the newest model in that family, so the table stays correct as new models ship. The agent file's `model:` is only the default; pass the routed model on each dispatch call.
 
 Blast radius **also** independently sets review rigor (below), regardless of the size/thinking result.
 
@@ -136,7 +161,11 @@ Read-only tickets (research, review, scouting) don't need a branch or worktree �
 
 ## Dispatch — the hand
 
-Give it: **the mission brief + the task packet.** Nothing more. It boots in its worktree, reads the spec, implements, **runs the suite in its own tree**, commits to its branch, and reports. Deviations from the spec must be flagged, never silently absorbed.
+Give it: **the mission brief + the task packet.** Nothing more. It boots in its worktree, reads the code map sections and `file:line` hits it was pointed at, opens only what it still needs, implements, **runs the suite in its own tree**, commits to its branch, and reports. Deviations from the spec must be flagged, never silently absorbed.
+
+**Point, don't make it search.** A packet whose `TOUCHES` and `CODEMAP` are specific lets the hand go straight to the right lines. If you can't make them specific, run a scout first — don't hand a Sonnet builder a repo-wide search.
+
+**Warm hands for related work.** If the next ticket touches the same area as a hand that just finished (overlapping files or code map sections), **continue that hand** (SendMessage to its agent id) with the new packet and new worktree instead of spawning a fresh one — it already holds the code in context. Start fresh instead when the area changes, the hand has done 3 tickets in a row, or its reports are getting sloppy (a long context degrades quality). Warm reuse never applies to reviewers: every review is cold.
 
 Require a **bounded** report, not a raw dump:
 ```
@@ -158,9 +187,11 @@ Never skip it. Not even for Haiku-tier work. This is the quality estimator, and 
 
 The reviewer is **cold**: a fresh context that receives **only the diff and the task packet** (spec + acceptance) — not the hand's report, not its narrative, not your conversation. It may read anything in the worktree it wants (master read access), and it reruns the suite itself rather than trusting `SUITE:`. Rigor (set by blast radius) decides how hard it looks:
 
-- **Low rigor** — check the diff against `ACCEPTANCE`; rerun the suite.
-- **Medium rigor** — run the full `definition-of-done` checklist; evidence required at `file:line` or `command → result`, never "should work".
-- **High rigor** — medium, **plus a second independent cold reviewer** blind to the first. If the review is a genuine *design* fork (multiple defensible answers, costly to reverse) rather than a correctness check, suggest `council` to the user rather than auto-running it — council costs 6–7× and wants consent.
+- **Low rigor** — `sonnet` reviewer. Check the diff against `ACCEPTANCE`; rerun the suite.
+- **Medium rigor** — `opus` reviewer. Run the full `definition-of-done` checklist; evidence required at `file:line` or `command → result`, never "should work".
+- **High rigor** — medium, **plus a second independent cold reviewer** (`opus`) blind to the first.
+
+Cold means no narrative, not no pointers: give the reviewer the diff, the packet, and the code map path. It starts from the diff and the files in `TOUCHES` and reads further only where something looks wrong. If the review is a genuine *design* fork (multiple defensible answers, costly to reverse) rather than a correctness check, suggest `council` to the user rather than auto-running it — council costs 6–7× and wants consent.
 
 The reviewer returns **only** this schema, then is retired:
 ```
@@ -177,7 +208,7 @@ You read the verdict, not the reviewer's scratch work. That stays in the reviewe
 
 ## Judge — REWORK and escalation
 
-**REWORK, first round → same hand.** The hand still holds the context; re-dispatch *it* with `MUST_FIX` as the body. It fixes in its worktree, reruns the suite, commits, reports again. A **new** cold reviewer reviews the new diff. This is not a blind retry — it carries the reviewer's specific findings — so it does not violate the never-retry-blind rule.
+**REWORK, first round → same hand.** The hand still holds the context; continue *it* (SendMessage to its agent id) with `MUST_FIX` as the body. It fixes in its worktree, reruns the suite, commits, reports again. A **new** cold reviewer reviews the new diff. This is not a blind retry — it carries the reviewer's specific findings — so it does not violate the never-retry-blind rule.
 
 **REWORK, second round → escalate.** Classify why it failed twice:
 - **Simple miss** (mechanical gap the hand keeps missing) → bump the model **one tier**, fresh hand in the same worktree, feedback packet = both rounds' `MUST_FIX`.
@@ -212,7 +243,7 @@ When comparing N approaches to the same problem: mint N tickets with the same sp
 
 ## Fold and retire
 
-After `MERGED`: fold the delta into the brief using `context-compressor`'s scratchpad pattern — update `DONE` with the terse outcome, update `CONSTRAINTS`/`DECISIONS` if the ticket established anything durable, discard the packet. Then **retire**: hand released, worktree removed, branch deleted, seat freed. Ticket → `CLOSED`.
+After `MERGED`: fold the delta into the brief using `context-compressor`'s scratchpad pattern — update `DONE` with the terse outcome, update `CONSTRAINTS`/`DECISIONS` if the ticket established anything durable, discard the packet. Then **retire**: worktree removed, branch deleted, seat freed. The hand is released too, unless the next ticket qualifies for warm reuse (see Dispatch). Ticket → `CLOSED`. At mission end, delete the code map.
 
 Because raw work **never entered your context** in the first place, this fold is the *only* compaction you ever need. That is the entire payoff of routing through subagents: the isolation is structural, not something you have to clean up after.
 
@@ -233,5 +264,7 @@ Release steps (changelog, version bump, tag, image) are the lead's job **only wh
 - **Never** serialize tickets that don't need to be serial — fill free seats with disjoint tickets.
 - **Never** exceed `SEATS`.
 - **Never** leave a closed ticket's worktree or branch behind.
+- **Never** paste code map contents into a packet or read them yourself — pass the path and section names.
+- **Never** dispatch a hand with a vague `TOUCHES` into a large repo — scout first, or point it at the code map.
 - **Never** dispatch a subagent for a genuinely atomic fix (one line, one lookup) — just do it inline.
 - **Never** simulate subagents in a single context if real Task tooling is absent — say so instead.
