@@ -32,10 +32,10 @@ Raw file contents, terminal output, and subagent scratch work **never** enter yo
    c. Mint                           → branch + worktree + seat for this ticket
    d. Dispatch                       → fresh hand, or the warm hand from the previous ticket in the same area
    e. Cold review                    → fresh reviewer gets diff + packet only → ACCEPT | REWORK
-   f. Judge                          → REWORK to same hand once → then escalate; ACCEPT → merge gate
-   g. Merge gate                     → merge to main, full suite on main; red = revert + escalate
+   f. Judge                          → any failed attempt → next rung of the model ladder; ACCEPT → merge gate
+   g. Merge gate                     → merge to main, triage runs full suite on main; red = revert + next rung
    h. Fold + retire                  → fold outcome into brief; remove worktree, delete branch; keep hand warm only if the next ticket is in the same area
-4. On repeated failure, escalate; at the cap, surface to the user.
+4. At the top of the ladder (fable), a further failure surfaces to the user.
 ```
 
 **Planning is never skipped.** Every non-trivial request gets a `plan-first` pass — tasks, order, acceptance, disjoint scopes — before anything is dispatched. What is reserved for **huge builds only, and only after the user explicitly says yes**, is the heavy front-end: multi-phase clarifying questions, a written brief, `to-prd`, then `to-issues`. If a request looks that big, ask once — *"this looks like a big build; want the full PRD → issues treatment, or plan-and-go?"* — and default to plan-and-go if unanswered.
@@ -70,6 +70,7 @@ OPEN → MINTED → IN_PROGRESS → REPORTED → REVIEW → (REWORK → IN_PROGR
 TICKET:     id + one-line title
 TASK:       what to build, precisely (the spec)
 ACCEPTANCE: exactly how the reviewer will verify it (tests / schema / DoD subset)
+CHECK:      command(s) whose exit code decides "done" — required for `chore`, recommended for all
 TOUCHES:    expected files / surface area — must be disjoint from every other in-flight ticket
 CONTEXT:    minimal brief-derived context the hand needs — NOT raw file dumps
 CODEMAP:    path + the section headings relevant to this ticket, plus scout's file:line hits
@@ -111,13 +112,14 @@ Rules:
 
 ---
 
-## Routing — three independent knobs, not one score
+## Routing — starting rung and review rigor are separate decisions
 
-The common mistake is collapsing everything into a single difficulty number. Keep three separate decisions:
+The common mistake is collapsing everything into a single difficulty number. Keep two separate decisions:
 
-- **Model size** ← capability the task demands + blast radius
-- **Thinking tier** ← reasoning depth + ambiguity (apply expensive reasoning only where it pays)
+- **Starting rung** (agent + model) ← capability the task demands + blast radius
 - **Review rigor** ← blast radius + reversibility  *(independent — a task can be trivial to do but catastrophic to get wrong)*
+
+Effort is not a routing knob: it can't be set per dispatch. The Haiku agents (`scout`, `chore`, `triage`) pin `effort: high` in their files; the others follow the session's effort.
 
 Rate each signal 0–2:
 
@@ -132,14 +134,17 @@ Rate each signal 0–2:
 
 **Deterministic score, logged override.** Compute the sum every time and route by the table below — so every decision is auditable and the rubric can be tuned against real outcomes. You *may* override the tier, but only if you write the reason into `DECISIONS`.
 
-| Score (0–12) | Model | Thinking |
-|---|---|---|
-| 0–2 | `haiku` | low |
-| 3–5 | `sonnet` | medium |
-| 6–8 | `sonnet` | high |
-| 9–12 | `opus` | high / ultra |
+| Score (0–12) | Starting rung |
+|---|---|
+| 0–2 **and** every chore gate holds | `chore` (haiku) |
+| 0–8 otherwise | `builder` @ `sonnet` |
+| 9–12 | `builder` @ `opus` |
 
-Route by family alias (`haiku` / `sonnet` / `opus`), never a versioned name — the alias resolves to the newest model in that family, so the table stays correct as new models ship. The agent file's `model:` is only the default; pass the routed model on each dispatch call.
+**Chore gates** — a sum can hide a veto, so all must hold: no single signal scores 2; Output determinism = 0 (a `CHECK` command decides done); every file is named in `TOUCHES`; Escalation history = 0. `fable` is never a starting rung — it is reached only by escalation (see Judge), unless the user asks for it.
+
+Route by family alias (`haiku` / `sonnet` / `opus` / `fable`), never a versioned name — on the Anthropic API the alias resolves to the newest model in that family, so the table stays correct as new models ship. (On Bedrock / Vertex / Foundry, `haiku` stays on Haiku 4.5 unless the user sets `ANTHROPIC_DEFAULT_HAIKU_MODEL`.) The agent file's `model:` is only the default; pass the routed model on each `builder` / `refuter` / `debugger` dispatch. Never pass a model to `scout`, `chore` or `triage` except when escalating — a per-call model silently overrides their frontmatter.
+
+Locate with `scout`, never the built-in Explore agent: Explore runs on your own (lead) model.
 
 Blast radius **also** independently sets review rigor (below), regardless of the size/thinking result.
 
@@ -165,7 +170,7 @@ Give it: **the mission brief + the task packet.** Nothing more. It boots in its 
 
 **Point, don't make it search.** A packet whose `TOUCHES` and `CODEMAP` are specific lets the hand go straight to the right lines. If you can't make them specific, run a scout first — don't hand a Sonnet builder a repo-wide search.
 
-**Warm hands for related work.** If the next ticket touches the same area as a hand that just finished (overlapping files or code map sections), **continue that hand** (SendMessage to its agent id) with the new packet and new worktree instead of spawning a fresh one — it already holds the code in context. Start fresh instead when the area changes, the hand has done 3 tickets in a row, or its reports are getting sloppy (a long context degrades quality). Warm reuse never applies to reviewers: every review is cold.
+**Warm hands for related work.** If the next ticket touches the same area as a hand that just finished (overlapping files or code map sections), **continue that hand** (SendMessage to its agent id) with the new packet and new worktree instead of spawning a fresh one — it already holds the code in context. Start fresh instead when the area changes, the hand has done 3 tickets in a row, or its reports are getting sloppy (a long context degrades quality). Warm reuse never applies to `chore` (each chore starts fresh, keeping it small and cheap), to a hand that just failed (it climbs the ladder instead), or to reviewers: every review is cold.
 
 Require a **bounded** report, not a raw dump:
 ```
@@ -206,21 +211,32 @@ You read the verdict, not the reviewer's scratch work. That stays in the reviewe
 
 ---
 
-## Judge — REWORK and escalation
+## Judge — verify, then climb the model ladder
 
-**REWORK, first round → same hand.** The hand still holds the context; continue *it* (SendMessage to its agent id) with `MUST_FIX` as the body. It fixes in its worktree, reruns the suite, commits, reports again. A **new** cold reviewer reviews the new diff. This is not a blind retry — it carries the reviewer's specific findings — so it does not violate the never-retry-blind rule.
+A verifier decides whether an attempt failed — never the hand's own report. Each of these is a **failed attempt**:
+- the cold reviewer returns `REWORK`;
+- `CHECK` / the suite fails, or a `chore` reports `blocked` or `partial` (including hitting its turn cap);
+- the report is out of schema, or the diff edits files outside `TOUCHES`;
+- the merge gate goes red (triage report) → revert first.
 
-**REWORK, second round → escalate.** Classify why it failed twice:
-- **Simple miss** (mechanical gap the hand keeps missing) → bump the model **one tier**, fresh hand in the same worktree, feedback packet = both rounds' `MUST_FIX`.
-- **Unclear root cause** (no obvious mechanical fix, or failing the same way) → dispatch a **diagnosis-only** subagent to reproduce and state the root cause — it does not fix anything:
+**Every failed attempt climbs one rung:**
+```
+chore (haiku) → builder @ sonnet → builder @ opus → builder @ fable → surface to user
+```
+- **Fresh hand on the next rung**, same worktree. You decide whether to keep or reset uncommitted changes (keep if the failure list shrank). Retire the failed hand — never continue it.
+- **Feedback packet = a short failure summary, never the previous transcript:** `MUST_FIX`, triage `FAILURES`, or the chore's `BLOCKED` + `LEFTOVER`, accumulated across rungs. A stronger model does better from a summary than from a weaker model's history.
+- **A ticket starts at its routed rung**, so one routed to `opus` has only `fable` above it.
+- **Unclear root cause** (the same failure on two rungs in a row, the reviewer recommends `escalate`, or it can't say what is wrong) → dispatch the `debugger` before the next rung; its report joins the packet. On the `fable` rung, pass `model: fable` to the debugger as well:
   ```
   REPRODUCED:  yes/no — how
   ROOT CAUSE:  specific mechanism, with file:line
   CONFIDENCE:  high/medium/low
   ```
-  Its report becomes the feedback packet for the next hand.
+- **Review rigor rises with the ladder:** an escalated ticket is reviewed at least at medium rigor (`opus`); on the `fable` rung, at high.
+- **Read-only agents climb too:** if a `scout` or `triage` result proves wrong (a hand flags a bad pointer, a NOT FOUND that exists, a miscounted failure), re-run it one rung up by passing the model explicitly.
+- **Top of the ladder:** if the `fable` attempt fails — or `fable` isn't available in this account/provider, making `opus` the top — stop and surface to the user: the failing verdict **plus your own recommendation** (change approach, relax a constraint, take it manual).
 
-**Cap at 2 escalations.** Then stop and surface to the user: the failing verdict **plus your own recommendation** (change approach, relax a constraint, take it manual). Don't loop Opus calls against a wall.
+Log every rung in `DECISIONS`: ticket, rung, agent, the model that actually ran (from the transcript, not the frontmatter), turns used, verdict, failure reason. That ledger is how the routing gets tuned.
 
 ---
 
@@ -228,8 +244,8 @@ You read the verdict, not the reviewer's scratch work. That stays in the reviewe
 
 On ACCEPT:
 1. Merge the ticket branch into main (rebase first if main moved).
-2. Run the **full suite on main** — not just the ticket's tests. Integration breakage is what per-ticket review cannot see.
-3. **Green** → ticket `MERGED`. **Red** → revert the merge, ticket `REVERTED`, and treat it as a REWORK with the failing suite summary (counts + failing test names, not logs) as `MUST_FIX`. Escalation rules apply.
+2. Dispatch `triage` to run the **full suite on main** — not just the ticket's tests. Integration breakage is what per-ticket review cannot see. You read only its report, never the output.
+3. **Green** → ticket `MERGED`. **Red** → revert the merge, ticket `REVERTED`, and treat it as a failed attempt with triage's `TOTALS` + `FAILURES` as `MUST_FIX`. The ladder applies.
 
 Don't merge while another ticket's suite is still running on main; queue merges.
 
@@ -253,11 +269,11 @@ Release steps (changelog, version bump, tag, image) are the lead's job **only wh
 
 ## Never-do list (these keep the guarantees true)
 
-- **Never** read raw files or terminal output into your own context to "just quickly check" — dispatch a reviewer (or scout, for locating). The moment you read raw work, guarantee #2 is gone.
+- **Never** read raw files or terminal output into your own context to "just quickly check" — dispatch a reviewer (or `scout` for locating, `triage` for command output). The moment you read raw work, guarantee #2 is gone.
 - **Never** skip `plan-first`. Never run the interview → brief → `to-prd` → `to-issues` front-end without the user explicitly confirming a huge build.
 - **Never** accept a verdict or report that isn't in-schema. Enforce the bound.
 - **Never** skip cold review, at any tier. Never let the reviewer see the hand's narrative — diff + spec only.
-- **Never** retry blind. Rework carries `MUST_FIX`; the second failure escalates.
+- **Never** retry blind or on the same rung. Every failed attempt climbs the ladder with a failure summary.
 - **Never** merge without the full suite on main; never leave a red main — revert.
 - **Never** dispatch against a stale brief — fold first.
 - **Never** dispatch two hands with overlapping `TOUCHES`, and never let competing/experimental hands share a worktree.
@@ -266,5 +282,7 @@ Release steps (changelog, version bump, tag, image) are the lead's job **only wh
 - **Never** leave a closed ticket's worktree or branch behind.
 - **Never** paste code map contents into a packet or read them yourself — pass the path and section names.
 - **Never** dispatch a hand with a vague `TOUCHES` into a large repo — scout first, or point it at the code map.
-- **Never** dispatch a subagent for a genuinely atomic fix (one line, one lookup) — just do it inline.
+- **Never** edit code yourself, not even a one-liner — dispatch `chore`. Answer pure questions (one lookup you already hold) inline.
+- **Never** use the built-in Explore agent — use `scout`.
+- **Never** pass a model override to `scout`, `chore` or `triage` except when escalating.
 - **Never** simulate subagents in a single context if real Task tooling is absent — say so instead.
