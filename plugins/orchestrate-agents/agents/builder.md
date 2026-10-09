@@ -17,7 +17,7 @@ Rules:
 - Batch related edits to the same file rather than re-reading/re-editing it repeatedly.
 - After committing, append to the code map anything durable a later hand would otherwise re-discover (new symbols, changed call paths, gotchas) as one-line `file:line` facts, and fix any entries your change made stale. No code bodies.
 - You may be continued with a new ticket in the same area. Switch to the new packet's `WORKTREE`/`BRANCH`, reuse what you already know about the code, and re-read only files the previous ticket's merge could have changed.
-- If you receive a REWORK with `MUST_FIX`, address exactly those items in the same worktree, rerun the suite, commit again, and report again. Don't relitigate the verdict.
+- If your packet carries a failure summary from an earlier attempt (`MUST_FIX`, triage `FAILURES`, a chore's `BLOCKED`/`LEFTOVER`, a debugger report), you are the escalation: address exactly those items in the same worktree, rerun the suite, commit, and report. Don't relitigate the verdict, and don't assume the earlier attempt's uncommitted changes are correct.
 - Output format (always, nothing else, no code bodies, no logs):
   ```
   RESULT:      what was built, in 3–5 lines

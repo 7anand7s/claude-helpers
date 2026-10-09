@@ -10,8 +10,8 @@
     {
       "name": "orchestrate-agents",
       "source": "./plugins/orchestrate-agents",
-      "description": "Scout / researcher / builder (hand) / refuter (cold reviewer) / debugger (diagnosis-only) subagents for the orchestrate loop.",
-      "version": "0.6.0",
+      "description": "Scout / chore / triage (Haiku) + researcher / builder / refuter / debugger subagents for the orchestrate loop, with a haiku→sonnet→opus→fable escalation ladder.",
+      "version": "0.7.0",
       "category": "productivity"
     }
   ]
